@@ -95,6 +95,14 @@ public:
 
     const auto& get_mouse_delta() const { return m_mouse_delta; }
     const auto& get_keyboard_state() const { return m_last_keys; }
+    auto get_gamepad_buttons() const { return m_last_gamepad_buttons; }
+    auto get_gamepad_left_trigger() const { return m_last_gamepad_left_trigger; }
+    auto get_gamepad_right_trigger() const { return m_last_gamepad_right_trigger; }
+    void update_gamepad_state(uint16_t buttons, uint8_t left_trigger, uint8_t right_trigger) {
+        m_last_gamepad_buttons = buttons;
+        m_last_gamepad_left_trigger = left_trigger;
+        m_last_gamepad_right_trigger = right_trigger;
+    }
 
     Address get_module() const { return m_game_module; }
 
@@ -319,6 +327,9 @@ private:
     float m_accumulated_mouse_delta[2]{};
     float m_mouse_delta[2]{};
     std::array<uint8_t, 256> m_last_keys{0};
+    uint16_t m_last_gamepad_buttons{0};
+    uint8_t m_last_gamepad_left_trigger{0};
+    uint8_t m_last_gamepad_right_trigger{0};
     std::unique_ptr<D3D11Hook> m_d3d11_hook{};
     std::unique_ptr<D3D12Hook> m_d3d12_hook{};
     std::unique_ptr<WindowsMessageHook> m_windows_message_hook{};

@@ -432,6 +432,16 @@ class ModKey: public ModInt32 {
 public:
     using Ptr = std::unique_ptr<ModKey>;
 
+    // Values 0-255: Windows virtual key codes (keyboard keys)
+    // Values GAMEPAD_BUTTON_BASE (256) through GAMEPAD_BUTTON_BASE+15: XInput wButtons bits 0-15
+    // Value GAMEPAD_BUTTON_BASE+16: Left trigger (pressed when > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
+    // Value GAMEPAD_BUTTON_BASE+17: Right trigger (pressed when > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
+    static constexpr int32_t UNBOUND_KEY{ -1 };
+    static constexpr int32_t GAMEPAD_BUTTON_BASE{ 256 };
+    static constexpr int32_t GAMEPAD_LEFT_TRIGGER{ GAMEPAD_BUTTON_BASE + 16 };
+    static constexpr int32_t GAMEPAD_RIGHT_TRIGGER{ GAMEPAD_BUTTON_BASE + 17 };
+    static constexpr int32_t GAMEPAD_BUTTON_MAX{ GAMEPAD_RIGHT_TRIGGER };
+
     static auto create(std::string_view config_name, int32_t default_value = UNBOUND_KEY, bool advanced_option = false) {
         return std::make_unique<ModKey>(config_name, default_value);
     }
@@ -459,8 +469,9 @@ public:
         }
 
         if (m_waiting_for_new_key) {
+            // Check keyboard keys first
             const auto &keys = g_framework->get_keyboard_state();
-            for (int32_t k{ 0 }; k < keys.size(); ++k) {
+            for (int32_t k{ 0 }; k < static_cast<int32_t>(keys.size()); ++k) {
                 if (k == VK_LBUTTON || k == VK_RBUTTON) {
                     continue;
                 }
@@ -472,8 +483,31 @@ public:
                 }
             }
 
+            // If no keyboard key was pressed, check gamepad buttons
+            if (m_waiting_for_new_key) {
+                const auto gp_buttons = g_framework->get_gamepad_buttons();
+                for (int i = 0; i < 16; ++i) {
+                    if (gp_buttons & (1 << i)) {
+                        m_value = GAMEPAD_BUTTON_BASE + i;
+                        m_waiting_for_new_key = false;
+                        break;
+                    }
+                }
+            }
+
+            // Check gamepad triggers
+            if (m_waiting_for_new_key) {
+                if (g_framework->get_gamepad_left_trigger() > XINPUT_GAMEPAD_TRIGGER_THRESHOLD) {
+                    m_value = GAMEPAD_LEFT_TRIGGER;
+                    m_waiting_for_new_key = false;
+                } else if (g_framework->get_gamepad_right_trigger() > XINPUT_GAMEPAD_TRIGGER_THRESHOLD) {
+                    m_value = GAMEPAD_RIGHT_TRIGGER;
+                    m_waiting_for_new_key = false;
+                }
+            }
+
             ImGui::SameLine();
-            ImGui::Text("Press any key...");
+            ImGui::Text("Press any key or gamepad button...");
         }
         else {
             ImGui::SameLine();
@@ -484,6 +518,14 @@ public:
                 }
                 else {
                     ImGui::Text("%i (Unknown)", m_value);
+                }
+            }
+            else if (m_value >= GAMEPAD_BUTTON_BASE && m_value <= GAMEPAD_BUTTON_MAX) {
+                if (keycodes.contains(m_value)) {
+                    ImGui::Text("%s", keycodes[m_value].c_str());
+                }
+                else {
+                    ImGui::Text("Gamepad %i (Unknown)", m_value - GAMEPAD_BUTTON_BASE);
                 }
             }
             else {
@@ -497,7 +539,23 @@ public:
     }
 
     bool is_key_down() const {
-        if (m_value < 0 || m_value > 255) {
+        if (m_value < 0) {
+            return false;
+        }
+
+        if (m_value >= GAMEPAD_BUTTON_BASE) {
+            const auto offset = m_value - GAMEPAD_BUTTON_BASE;
+            if (offset < 16) {
+                return (g_framework->get_gamepad_buttons() & (uint16_t)(1 << offset)) != 0;
+            } else if (m_value == GAMEPAD_LEFT_TRIGGER) {
+                return g_framework->get_gamepad_left_trigger() > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+            } else if (m_value == GAMEPAD_RIGHT_TRIGGER) {
+                return g_framework->get_gamepad_right_trigger() > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+            }
+            return false;
+        }
+
+        if (m_value > 255) {
             return false;
         }
 
@@ -534,7 +592,6 @@ public:
         }
     }
 
-    static constexpr int32_t UNBOUND_KEY{ -1 };
     static std::unordered_map<int, std::string> keycodes;
 
 protected:

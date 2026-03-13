@@ -174,4 +174,23 @@ std::unordered_map<int, std::string> ModKey::keycodes{
     {VK_NONAME, "Reserved (no name)"},
     {VK_PA1, "PA1 key"},
     {VK_OEM_CLEAR, "OEM Clear key"},
+    // XInput gamepad buttons (values >= ModKey::GAMEPAD_BUTTON_BASE)
+    // wButtons bit indices 0-15 mapped to GAMEPAD_BUTTON_BASE + bit_index
+    {256 + 0,  "Gamepad DPad Up"},
+    {256 + 1,  "Gamepad DPad Down"},
+    {256 + 2,  "Gamepad DPad Left"},
+    {256 + 3,  "Gamepad DPad Right"},
+    {256 + 4,  "Gamepad Start"},
+    {256 + 5,  "Gamepad Back"},
+    {256 + 6,  "Gamepad Left Stick"},
+    {256 + 7,  "Gamepad Right Stick"},
+    {256 + 8,  "Gamepad Left Shoulder"},
+    {256 + 9,  "Gamepad Right Shoulder"},
+    // Bits 10 and 11 are reserved/unused in the XInput wButtons bitmask
+    {256 + 12, "Gamepad A"},
+    {256 + 13, "Gamepad B"},
+    {256 + 14, "Gamepad X"},
+    {256 + 15, "Gamepad Y"},
+    {256 + 16, "Gamepad Left Trigger"},
+    {256 + 17, "Gamepad Right Trigger"},
 };

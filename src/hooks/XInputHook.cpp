@@ -215,6 +215,14 @@ uint32_t XInputHook::get_state_hook_1_4(uint32_t user_index, XINPUT_STATE* state
 
     auto ret = g_hook->m_xinput_1_4_get_state_hook.call<uint32_t>(user_index, state);
 
+    if (ret == ERROR_SUCCESS && state != nullptr) {
+        g_framework->update_gamepad_state(
+            state->Gamepad.wButtons,
+            state->Gamepad.bLeftTrigger,
+            state->Gamepad.bRightTrigger
+        );
+    }
+
     const auto& mods = g_framework->get_mods()->get_mods();
 
     for (auto& mod : mods) {
@@ -246,6 +254,14 @@ uint32_t XInputHook::get_state_hook_1_3(uint32_t user_index, XINPUT_STATE* state
     }
 
     auto ret = g_hook->m_xinput_1_3_get_state_hook.call<uint32_t>(user_index, state);
+
+    if (ret == ERROR_SUCCESS && state != nullptr) {
+        g_framework->update_gamepad_state(
+            state->Gamepad.wButtons,
+            state->Gamepad.bLeftTrigger,
+            state->Gamepad.bRightTrigger
+        );
+    }
 
     const auto& mods = g_framework->get_mods()->get_mods();
 
