@@ -486,9 +486,9 @@ public:
             // If no keyboard key was pressed, check gamepad buttons
             if (m_waiting_for_new_key) {
                 const auto gp_buttons = g_framework->get_gamepad_buttons();
-                for (int i = 0; i < 16; ++i) {
-                    if (gp_buttons & (1 << i)) {
-                        m_value = GAMEPAD_BUTTON_BASE + i;
+                for (int bit_index = 0; bit_index < 16; ++bit_index) {
+                    if (gp_buttons & (1 << bit_index)) {
+                        m_value = GAMEPAD_BUTTON_BASE + bit_index;
                         m_waiting_for_new_key = false;
                         break;
                     }

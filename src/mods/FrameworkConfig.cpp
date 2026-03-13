@@ -48,6 +48,10 @@ void FrameworkConfig::on_draw_sidebar_entry(std::string_view in_entry) {
 }
 
 void FrameworkConfig::on_frame() {
+    if (m_menu_key->is_key_down_once()) {
+        g_framework->set_draw_ui(!g_framework->is_drawing_ui(), true);
+    }
+
     if (m_show_cursor_key->is_key_down_once()) {
         m_always_show_cursor->toggle();
     }

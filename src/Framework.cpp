@@ -831,9 +831,7 @@ bool Framework::on_message(HWND wnd, UINT message, WPARAM w_param, LPARAM l_para
             m_last_keys[w_param] = true;
         }
 
-        if (w_param == VK_INSERT ||
-            w_param == FrameworkConfig::get()->get_menu_key()->value()) 
-        {
+        if (w_param == VK_INSERT) {
             set_draw_ui(!m_draw_ui, true);
             return false;
         }
