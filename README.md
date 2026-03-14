@@ -1,6 +1,20 @@
-# UEVR ![build](https://github.com/praydog/UEVR/actions/workflows/dev-release.yml/badge.svg)
+# UEVR (chrisraff fork) ![build](https://github.com/praydog/UEVR/actions/workflows/dev-release.yml/badge.svg)
 
 Universal Unreal Engine VR Mod (4/5)
+
+> **This is a personal fork of [praydog/UEVR](https://github.com/praydog/UEVR)** with the following enhancements:
+>
+> ### Enhanced Camera Adjustment
+>
+> Camera position offsets can now be adjusted with fine-grained sliders directly in the in-game menu, in addition to the existing controller shortcuts. This makes it much easier to dial in the exact position you want without having to repeatedly nudge with the thumbstick.
+>
+> ![Camera settings](cameraSetting.png)
+>
+> ### Generic Input Device Binding for Actions
+>
+> Actions (such as opening the menu) can now be bound to generic input devices, not just XInput controllers. This is useful for flight sticks, racing wheels, and other non-standard controllers that UEVR wouldn't previously recognise for menu shortcuts.
+>
+> ![Keybindings](keybinds.png)
 
 ## Supported Engine Versions
 
