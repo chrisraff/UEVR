@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <bitset>
 #include <unordered_set>
 #include <memory>
 #include <filesystem>
@@ -102,6 +103,24 @@ public:
         m_last_gamepad_buttons = buttons;
         m_last_gamepad_left_trigger = left_trigger;
         m_last_gamepad_right_trigger = right_trigger;
+    }
+
+    static constexpr size_t MAX_GENERIC_DEVICES = 16;
+    static constexpr size_t MAX_GENERIC_BUTTONS_PER_DEVICE = 128;
+
+    struct GenericDeviceState {
+        HANDLE handle{};
+        std::string product_name{};
+        std::bitset<128> buttons{};
+        std::vector<uint8_t> preparsed_data{}; // cached PHIDP_PREPARSED_DATA
+    };
+
+    const auto& get_generic_devices() const { return m_generic_devices; }
+
+    bool get_generic_device_button(int slot, int button) const {
+        if (slot < 0 || slot >= (int)m_generic_devices.size()) return false;
+        if (button < 0 || button >= (int)MAX_GENERIC_BUTTONS_PER_DEVICE) return false;
+        return m_generic_devices[slot].buttons.test(button);
     }
 
     Address get_module() const { return m_game_module; }
@@ -271,6 +290,9 @@ private:
     bool initialize_xinput_hook();
     bool initialize_dinput_hook();
 
+    void register_raw_input_devices();
+    void update_generic_device_state(HANDLE device_handle, const RAWHID& hid_data);
+
     bool first_frame_initialize();
 
     void call_on_frame();
@@ -330,6 +352,7 @@ private:
     uint16_t m_last_gamepad_buttons{0};
     uint8_t m_last_gamepad_left_trigger{0};
     uint8_t m_last_gamepad_right_trigger{0};
+    std::vector<GenericDeviceState> m_generic_devices{};
     std::unique_ptr<D3D11Hook> m_d3d11_hook{};
     std::unique_ptr<D3D12Hook> m_d3d12_hook{};
     std::unique_ptr<WindowsMessageHook> m_windows_message_hook{};

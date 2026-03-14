@@ -848,6 +848,7 @@ target_link_libraries(uevr PUBLIC
 	shlwapi
 	d3d11
 	d3d12
+	hid
 	safetyhook
 	glm
 	imgui

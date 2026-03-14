@@ -3,6 +3,7 @@
 
 #include <windows.h>
 #include <ShlObj.h>
+#include <hidsdi.h>
 
 #include <spdlog/sinks/basic_file_sink.h>
 
@@ -854,26 +855,18 @@ bool Framework::on_message(HWND wnd, UINT message, WPARAM w_param, LPARAM l_para
         }
         break;
     case WM_INPUT: {
-        // RIM_INPUT means the window has focus
-        /*if (GET_RAWINPUT_CODE_WPARAM(w_param) == RIM_INPUT) {
-            uint32_t size = sizeof(RAWINPUT);
-            RAWINPUT raw{};
-            
-            // obtain size
-            GetRawInputData((HRAWINPUT)l_param, RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER));
+        UINT size = 0;
+        GetRawInputData((HRAWINPUT)l_param, RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER));
 
-            auto result = GetRawInputData((HRAWINPUT)l_param, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER));
-
-            if (raw.header.dwType == RIM_TYPEMOUSE) {
-                m_accumulated_mouse_delta[0] += (float)raw.data.mouse.lLastX;
-                m_accumulated_mouse_delta[1] += (float)raw.data.mouse.lLastY;
-
-                // Allowing camera movement when the UI is hovered while not focused
-                if (raw.data.mouse.lLastX || raw.data.mouse.lLastY) {
-                    is_mouse_moving = true;
+        if (size > 0 && size <= 4096) {
+            std::vector<uint8_t> raw_buf(size);
+            if (GetRawInputData((HRAWINPUT)l_param, RID_INPUT, raw_buf.data(), &size, sizeof(RAWINPUTHEADER)) == size) {
+                const RAWINPUT* raw = reinterpret_cast<const RAWINPUT*>(raw_buf.data());
+                if (raw->header.dwType == RIM_TYPEHID) {
+                    update_generic_device_state(raw->header.hDevice, raw->data.hid);
                 }
             }
-        }*/
+        }
     } break;
 
     default:
@@ -1714,6 +1707,7 @@ bool Framework::initialize_windows_message_hook() {
             return on_message(wnd, msg, w_param, l_param);
         };
 
+        register_raw_input_devices();
         m_message_hook_requested = false;
         return true;
     }
@@ -2063,4 +2057,83 @@ bool Framework::is_advanced_view_enabled() const {
 
 Framework::ImGuiThemes Framework::get_imgui_theme_value() const {
     return static_cast<ImGuiThemes>(FrameworkConfig::get()->get_imgui_theme_value());
+}
+void Framework::register_raw_input_devices() {
+    RAWINPUTDEVICE rid[2]{};
+    // Generic Desktop: Joystick (usage 0x04) and Gamepad (usage 0x05)
+    rid[0].usUsagePage = HID_USAGE_PAGE_GENERIC;
+    rid[0].usUsage = HID_USAGE_GENERIC_JOYSTICK;
+    rid[0].dwFlags = RIDEV_INPUTSINK;
+    rid[0].hwndTarget = m_wnd;
+
+    rid[1].usUsagePage = HID_USAGE_PAGE_GENERIC;
+    rid[1].usUsage = HID_USAGE_GENERIC_GAMEPAD;
+    rid[1].dwFlags = RIDEV_INPUTSINK;
+    rid[1].hwndTarget = m_wnd;
+
+    if (!RegisterRawInputDevices(rid, 2, sizeof(RAWINPUTDEVICE))) {
+        SPDLOG_WARN("[Framework] Failed to register raw input devices for generic HID: {}", GetLastError());
+    } else {
+        SPDLOG_INFO("[Framework] Registered raw input devices for generic HID");
+    }
+}
+
+void Framework::update_generic_device_state(HANDLE device_handle, const RAWHID& hid_data) {
+    // Find or create device slot
+    int slot = -1;
+    for (int i = 0; i < (int)m_generic_devices.size(); ++i) {
+        if (m_generic_devices[i].handle == device_handle) {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot == -1) {
+        if (m_generic_devices.size() >= MAX_GENERIC_DEVICES) {
+            return;
+        }
+        slot = (int)m_generic_devices.size();
+        m_generic_devices.push_back({});
+        auto& dev = m_generic_devices[slot];
+        dev.handle = device_handle;
+
+        char name_buf[256]{};
+        UINT name_size = sizeof(name_buf);
+        GetRawInputDeviceInfoA(device_handle, RIDI_DEVICENAME, name_buf, &name_size);
+        dev.product_name = name_buf;
+
+        UINT preparsed_size = 0;
+        GetRawInputDeviceInfo(device_handle, RIDI_PREPARSEDDATA, nullptr, &preparsed_size);
+        if (preparsed_size > 0) {
+            dev.preparsed_data.resize(preparsed_size);
+            if (GetRawInputDeviceInfo(device_handle, RIDI_PREPARSEDDATA, dev.preparsed_data.data(), &preparsed_size) == (UINT)-1) {
+                dev.preparsed_data.clear();
+            }
+        }
+        SPDLOG_INFO("[Framework] Generic input device registered in slot {}: {}", slot, dev.product_name);
+    }
+
+    auto& dev = m_generic_devices[slot];
+    dev.buttons.reset();
+
+    if (dev.preparsed_data.empty() || hid_data.dwSizeHid == 0) {
+        return;
+    }
+
+    auto* preparsed = reinterpret_cast<PHIDP_PREPARSED_DATA>(dev.preparsed_data.data());
+    USAGE usages[MAX_GENERIC_BUTTONS_PER_DEVICE]{};
+
+    const BYTE* report_ptr = hid_data.bRawData;
+    for (DWORD r = 0; r < hid_data.dwCount; ++r, report_ptr += hid_data.dwSizeHid) {
+        ULONG usage_length = (ULONG)MAX_GENERIC_BUTTONS_PER_DEVICE;
+        if (HidP_GetUsages(HidP_Input, HID_USAGE_PAGE_BUTTON, 0, usages, &usage_length,
+                           preparsed, (PCHAR)report_ptr, hid_data.dwSizeHid) == HIDP_STATUS_SUCCESS) {
+            for (ULONG u = 0; u < usage_length; ++u) {
+                // HID button usages are 1-based; map to 0-based index
+                if (usages[u] >= 1 && usages[u] <= (USAGE)MAX_GENERIC_BUTTONS_PER_DEVICE) {
+                    dev.buttons.set(usages[u] - 1);
+                }
+            }
+        }
+    }
 }

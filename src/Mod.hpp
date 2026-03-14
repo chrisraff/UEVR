@@ -436,11 +436,23 @@ public:
     // Values GAMEPAD_BUTTON_BASE (256) through GAMEPAD_BUTTON_BASE+15: XInput wButtons bits 0-15
     // Value GAMEPAD_BUTTON_BASE+16: Left trigger (pressed when > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
     // Value GAMEPAD_BUTTON_BASE+17: Right trigger (pressed when > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
+    // Values GENERIC_DEVICE_BASE (1024)+: generic HID device buttons
+    //   device slot = (value - GENERIC_DEVICE_BASE) / MAX_GENERIC_BUTTONS
+    //   button index = (value - GENERIC_DEVICE_BASE) % MAX_GENERIC_BUTTONS  (0-based)
     static constexpr int32_t UNBOUND_KEY{ -1 };
     static constexpr int32_t GAMEPAD_BUTTON_BASE{ 256 };
     static constexpr int32_t GAMEPAD_LEFT_TRIGGER{ GAMEPAD_BUTTON_BASE + 16 };
     static constexpr int32_t GAMEPAD_RIGHT_TRIGGER{ GAMEPAD_BUTTON_BASE + 17 };
     static constexpr int32_t GAMEPAD_BUTTON_MAX{ GAMEPAD_RIGHT_TRIGGER };
+    static constexpr int32_t GENERIC_DEVICE_BASE{ 1024 };
+    static constexpr int32_t MAX_GENERIC_BUTTONS{ (int32_t)Framework::MAX_GENERIC_BUTTONS_PER_DEVICE };
+    static constexpr int32_t GENERIC_DEVICE_MAX{ GENERIC_DEVICE_BASE + (int32_t)Framework::MAX_GENERIC_DEVICES * MAX_GENERIC_BUTTONS - 1 };
+
+    static void decode_generic_binding(int32_t value, int& slot, int& button) {
+        const int offset = value - GENERIC_DEVICE_BASE;
+        slot = offset / MAX_GENERIC_BUTTONS;
+        button = offset % MAX_GENERIC_BUTTONS;
+    }
 
     static auto create(std::string_view config_name, int32_t default_value = UNBOUND_KEY, bool advanced_option = false) {
         return std::make_unique<ModKey>(config_name, default_value);
@@ -465,6 +477,15 @@ public:
         context_menu_logic();
 
         if (ImGui::IsItemHovered() && ImGui::GetIO().MouseDown[0]) {
+            if (!m_waiting_for_new_key) {
+                // Snapshot currently-pressed generic device buttons so we don't
+                // immediately re-bind to axes or buttons that are already held.
+                const auto& devices = g_framework->get_generic_devices();
+                m_generic_device_baseline.resize(devices.size());
+                for (size_t i = 0; i < devices.size(); ++i) {
+                    m_generic_device_baseline[i] = devices[i].buttons;
+                }
+            }
             m_waiting_for_new_key = true;
         }
 
@@ -506,8 +527,25 @@ public:
                 }
             }
 
+            // Check generic HID device buttons (racing wheels, button boxes, etc.)
+            // Ignore any button that was already pressed when binding started (axes,
+            // resting hat positions, etc. that would cause an immediate false bind).
+            if (m_waiting_for_new_key) {
+                const auto& devices = g_framework->get_generic_devices();
+                for (int s = 0; s < (int)devices.size() && m_waiting_for_new_key; ++s) {
+                    for (int b = 0; b < (int)Framework::MAX_GENERIC_BUTTONS_PER_DEVICE && m_waiting_for_new_key; ++b) {
+                        const bool in_baseline = s < (int)m_generic_device_baseline.size() &&
+                                                 m_generic_device_baseline[s].test(b);
+                        if (!in_baseline && devices[s].buttons.test(b)) {
+                            m_value = GENERIC_DEVICE_BASE + s * MAX_GENERIC_BUTTONS + b;
+                            m_waiting_for_new_key = false;
+                        }
+                    }
+                }
+            }
+
             ImGui::SameLine();
-            ImGui::Text("Press any key or gamepad button...");
+            ImGui::Text("Press any key, gamepad button, or device button...");
         }
         else {
             ImGui::SameLine();
@@ -528,6 +566,16 @@ public:
                     ImGui::Text("Gamepad %i (Unknown)", m_value - GAMEPAD_BUTTON_BASE);
                 }
             }
+            else if (m_value >= GENERIC_DEVICE_BASE && m_value <= GENERIC_DEVICE_MAX) {
+                int slot, button;
+                decode_generic_binding(m_value, slot, button);
+                const auto& devices = g_framework->get_generic_devices();
+                if (slot < (int)devices.size()) {
+                    ImGui::Text("Device %d Button %d", slot, button + 1);
+                } else {
+                    ImGui::Text("Device %d Button %d (disconnected)", slot, button + 1);
+                }
+            }
             else {
                 ImGui::Text("Not bound");
             }
@@ -541,6 +589,12 @@ public:
     bool is_key_down() const {
         if (m_value < 0) {
             return false;
+        }
+
+        if (m_value >= GENERIC_DEVICE_BASE) {
+            int slot, button;
+            decode_generic_binding(m_value, slot, button);
+            return g_framework->get_generic_device_button(slot, button);
         }
 
         if (m_value >= GAMEPAD_BUTTON_BASE) {
@@ -597,6 +651,7 @@ public:
 protected:
     bool m_was_key_down{ false };
     bool m_waiting_for_new_key{ false };
+    std::vector<std::bitset<128>> m_generic_device_baseline{};
 };
 
 class ModString : public ModValue<std::string> {
