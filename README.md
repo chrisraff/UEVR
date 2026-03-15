@@ -16,6 +16,16 @@ Universal Unreal Engine VR Mod (4/5)
 >
 > ![Keybindings](keybinds.png)
 
+## Download & Install
+
+Download the latest release from the [Releases page](https://github.com/chrisraff/UEVR/releases).
+
+Extract the zip alongside your existing UEVR installation, overwriting files when prompted.
+
+Run `UEVRInjector.exe`.
+
+If this is your first time using UEVR, see the [upstream Getting Started guide](https://praydog.github.io/uevr-docs) for full setup instructions.
+
 ## Supported Engine Versions
 
 4.8 - 5.4
