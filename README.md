@@ -12,7 +12,7 @@ Universal Unreal Engine VR Mod (4/5)
 >
 > ### Generic Input Device Binding for Actions
 >
-> Actions (such as opening the menu) can now be bound to generic input devices, not just XInput controllers. This is useful for flight sticks, racing wheels, and other non-standard controllers that UEVR wouldn't previously recognise for menu shortcuts.
+> Actions (such as opening the menu) can now be bound to generic input devices, not just keyboards. This is useful for toggling game and UEVR UIs from flight sticks, racing wheels, and other controllers that UEVR wouldn't previously recognise for menu shortcuts.
 >
 > ![Keybindings](keybinds.png)
 
