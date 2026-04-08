@@ -11,6 +11,19 @@
 
 XInputHook* g_hook{nullptr};
 
+// Only track controller 0 for menu hotkeys. Tracking all indices would cause
+// whichever controller was polled last to overwrite the others, making the
+// binding respond to the wrong controller unpredictably.
+static void maybe_update_gamepad_state(uint32_t user_index, uint32_t ret, const XINPUT_STATE* state) {
+    if (user_index == 0 && ret == ERROR_SUCCESS && state != nullptr) {
+        g_framework->update_gamepad_state(
+            state->Gamepad.wButtons,
+            state->Gamepad.bLeftTrigger,
+            state->Gamepad.bRightTrigger
+        );
+    }
+}
+
 XInputHook::XInputHook() {
     g_hook = this;
     spdlog::info("[XInputHook] Entry");
@@ -215,13 +228,7 @@ uint32_t XInputHook::get_state_hook_1_4(uint32_t user_index, XINPUT_STATE* state
 
     auto ret = g_hook->m_xinput_1_4_get_state_hook.call<uint32_t>(user_index, state);
 
-    if (ret == ERROR_SUCCESS && state != nullptr) {
-        g_framework->update_gamepad_state(
-            state->Gamepad.wButtons,
-            state->Gamepad.bLeftTrigger,
-            state->Gamepad.bRightTrigger
-        );
-    }
+    maybe_update_gamepad_state(user_index, ret, state);
 
     const auto& mods = g_framework->get_mods()->get_mods();
 
@@ -255,13 +262,7 @@ uint32_t XInputHook::get_state_hook_1_3(uint32_t user_index, XINPUT_STATE* state
 
     auto ret = g_hook->m_xinput_1_3_get_state_hook.call<uint32_t>(user_index, state);
 
-    if (ret == ERROR_SUCCESS && state != nullptr) {
-        g_framework->update_gamepad_state(
-            state->Gamepad.wButtons,
-            state->Gamepad.bLeftTrigger,
-            state->Gamepad.bRightTrigger
-        );
-    }
+    maybe_update_gamepad_state(user_index, ret, state);
 
     const auto& mods = g_framework->get_mods()->get_mods();
 

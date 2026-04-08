@@ -858,7 +858,7 @@ bool Framework::on_message(HWND wnd, UINT message, WPARAM w_param, LPARAM l_para
         UINT size = 0;
         GetRawInputData((HRAWINPUT)l_param, RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER));
 
-        if (size > 0 && size <= 4096) {
+        if (size > 0 && size <= MAX_RAW_INPUT_SIZE) {
             std::vector<uint8_t> raw_buf(size);
             if (GetRawInputData((HRAWINPUT)l_param, RID_INPUT, raw_buf.data(), &size, sizeof(RAWINPUTHEADER)) == size) {
                 const RAWINPUT* raw = reinterpret_cast<const RAWINPUT*>(raw_buf.data());

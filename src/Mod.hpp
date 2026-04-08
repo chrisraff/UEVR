@@ -445,13 +445,15 @@ public:
     static constexpr int32_t GAMEPAD_RIGHT_TRIGGER{ GAMEPAD_BUTTON_BASE + 17 };
     static constexpr int32_t GAMEPAD_BUTTON_MAX{ GAMEPAD_RIGHT_TRIGGER };
     static constexpr int32_t GENERIC_DEVICE_BASE{ 1024 };
-    static constexpr int32_t MAX_GENERIC_BUTTONS{ (int32_t)Framework::MAX_GENERIC_BUTTONS_PER_DEVICE };
-    static constexpr int32_t GENERIC_DEVICE_MAX{ GENERIC_DEVICE_BASE + (int32_t)Framework::MAX_GENERIC_DEVICES * MAX_GENERIC_BUTTONS - 1 };
+    static constexpr int32_t MAX_GENERIC_BUTTONS{ static_cast<int32_t>(Framework::MAX_GENERIC_BUTTONS_PER_DEVICE) };
+    static constexpr int32_t GENERIC_DEVICE_MAX{ GENERIC_DEVICE_BASE + static_cast<int32_t>(Framework::MAX_GENERIC_DEVICES) * MAX_GENERIC_BUTTONS - 1 };
 
-    static void decode_generic_binding(int32_t value, int& slot, int& button) {
+    static_assert(GAMEPAD_BUTTON_MAX < GENERIC_DEVICE_BASE, "ModKey encoding ranges overlap");
+
+    struct GenericBinding { int slot; int button; };
+    static GenericBinding decode_generic_binding(int32_t value) {
         const int offset = value - GENERIC_DEVICE_BASE;
-        slot = offset / MAX_GENERIC_BUTTONS;
-        button = offset % MAX_GENERIC_BUTTONS;
+        return { offset / MAX_GENERIC_BUTTONS, offset % MAX_GENERIC_BUTTONS };
     }
 
     static auto create(std::string_view config_name, int32_t default_value = UNBOUND_KEY, bool advanced_option = false) {
@@ -567,8 +569,7 @@ public:
                 }
             }
             else if (m_value >= GENERIC_DEVICE_BASE && m_value <= GENERIC_DEVICE_MAX) {
-                int slot, button;
-                decode_generic_binding(m_value, slot, button);
+                const auto [slot, button] = decode_generic_binding(m_value);
                 const auto& devices = g_framework->get_generic_devices();
                 if (slot < (int)devices.size()) {
                     ImGui::Text("Device %d Button %d", slot, button + 1);
@@ -592,15 +593,14 @@ public:
         }
 
         if (m_value >= GENERIC_DEVICE_BASE) {
-            int slot, button;
-            decode_generic_binding(m_value, slot, button);
+            const auto [slot, button] = decode_generic_binding(m_value);
             return g_framework->get_generic_device_button(slot, button);
         }
 
         if (m_value >= GAMEPAD_BUTTON_BASE) {
             const auto offset = m_value - GAMEPAD_BUTTON_BASE;
             if (offset < 16) {
-                return (g_framework->get_gamepad_buttons() & (uint16_t)(1 << offset)) != 0;
+                return (g_framework->get_gamepad_buttons() & static_cast<uint16_t>(1u << offset)) != 0;
             } else if (m_value == GAMEPAD_LEFT_TRIGGER) {
                 return g_framework->get_gamepad_left_trigger() > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
             } else if (m_value == GAMEPAD_RIGHT_TRIGGER) {
@@ -651,7 +651,7 @@ public:
 protected:
     bool m_was_key_down{ false };
     bool m_waiting_for_new_key{ false };
-    std::vector<std::bitset<128>> m_generic_device_baseline{};
+    std::vector<std::bitset<Framework::MAX_GENERIC_BUTTONS_PER_DEVICE>> m_generic_device_baseline{};
 };
 
 class ModString : public ModValue<std::string> {
