@@ -111,17 +111,22 @@ public:
 
     struct GenericDeviceState {
         HANDLE handle{};
-        std::string product_name{};
+        std::string device_path{};   // from RIDI_DEVICENAME; stable ID across sessions
+        std::string display_name{};  // from HidD_GetProductString; human-readable
         std::bitset<MAX_GENERIC_BUTTONS_PER_DEVICE> buttons{};
         std::vector<uint8_t> preparsed_data{}; // cached PHIDP_PREPARSED_DATA
     };
 
     const auto& get_generic_devices() const { return m_generic_devices; }
 
-    bool get_generic_device_button(int slot, int button) const {
-        if (slot < 0 || slot >= (int)m_generic_devices.size()) return false;
+    bool get_generic_device_button(const std::string& device_path, int button) const {
         if (button < 0 || button >= (int)MAX_GENERIC_BUTTONS_PER_DEVICE) return false;
-        return m_generic_devices[slot].buttons.test(button);
+        for (const auto& dev : m_generic_devices) {
+            if (dev.device_path == device_path) {
+                return dev.handle != nullptr && dev.buttons.test(button);
+            }
+        }
+        return false;
     }
 
     Address get_module() const { return m_game_module; }

@@ -446,14 +446,13 @@ public:
     static constexpr int32_t GAMEPAD_BUTTON_MAX{ GAMEPAD_RIGHT_TRIGGER };
     static constexpr int32_t GENERIC_DEVICE_BASE{ 1024 };
     static constexpr int32_t MAX_GENERIC_BUTTONS{ static_cast<int32_t>(Framework::MAX_GENERIC_BUTTONS_PER_DEVICE) };
-    static constexpr int32_t GENERIC_DEVICE_MAX{ GENERIC_DEVICE_BASE + static_cast<int32_t>(Framework::MAX_GENERIC_DEVICES) * MAX_GENERIC_BUTTONS - 1 };
+    // Only the button index is encoded; device identity is stored separately in m_generic_device_path.
+    static constexpr int32_t GENERIC_DEVICE_MAX{ GENERIC_DEVICE_BASE + MAX_GENERIC_BUTTONS - 1 };
 
     static_assert(GAMEPAD_BUTTON_MAX < GENERIC_DEVICE_BASE, "ModKey encoding ranges overlap");
 
-    struct GenericBinding { int slot; int button; };
-    static GenericBinding decode_generic_binding(int32_t value) {
-        const int offset = value - GENERIC_DEVICE_BASE;
-        return { offset / MAX_GENERIC_BUTTONS, offset % MAX_GENERIC_BUTTONS };
+    static int decode_generic_button(int32_t value) {
+        return value - GENERIC_DEVICE_BASE;
     }
 
     static auto create(std::string_view config_name, int32_t default_value = UNBOUND_KEY, bool advanced_option = false) {
@@ -463,6 +462,21 @@ public:
     ModKey(std::string_view config_name, int32_t default_value = UNBOUND_KEY, bool advanced_option = false)
         : ModInt32{ config_name, default_value, advanced_option }
     {
+    }
+
+    void config_load(const utility::Config& cfg, bool set_defaults) override {
+        ModInt32::config_load(cfg, set_defaults);
+        if (set_defaults) {
+            m_generic_device_path.clear();
+            return;
+        }
+        auto v = cfg.get(std::string{ get_config_name_view() } + "_device");
+        m_generic_device_path = v.value_or("");
+    }
+
+    void config_save(utility::Config& cfg) override {
+        ModInt32::config_save(cfg);
+        cfg.set(std::string{ get_config_name_view() } + "_device", m_generic_device_path);
     }
 
     bool draw(std::string_view name) override {
@@ -482,10 +496,9 @@ public:
             if (!m_waiting_for_new_key) {
                 // Snapshot currently-pressed generic device buttons so we don't
                 // immediately re-bind to axes or buttons that are already held.
-                const auto& devices = g_framework->get_generic_devices();
-                m_generic_device_baseline.resize(devices.size());
-                for (size_t i = 0; i < devices.size(); ++i) {
-                    m_generic_device_baseline[i] = devices[i].buttons;
+                m_generic_device_baseline.clear();
+                for (const auto& dev : g_framework->get_generic_devices()) {
+                    m_generic_device_baseline[dev.device_path] = dev.buttons;
                 }
             }
             m_waiting_for_new_key = true;
@@ -533,13 +546,15 @@ public:
             // Ignore any button that was already pressed when binding started (axes,
             // resting hat positions, etc. that would cause an immediate false bind).
             if (m_waiting_for_new_key) {
-                const auto& devices = g_framework->get_generic_devices();
-                for (int s = 0; s < (int)devices.size() && m_waiting_for_new_key; ++s) {
+                for (const auto& dev : g_framework->get_generic_devices()) {
+                    if (!m_waiting_for_new_key) break;
+                    const auto baseline_it = m_generic_device_baseline.find(dev.device_path);
                     for (int b = 0; b < (int)Framework::MAX_GENERIC_BUTTONS_PER_DEVICE && m_waiting_for_new_key; ++b) {
-                        const bool in_baseline = s < (int)m_generic_device_baseline.size() &&
-                                                 m_generic_device_baseline[s].test(b);
-                        if (!in_baseline && devices[s].buttons.test(b)) {
-                            m_value = GENERIC_DEVICE_BASE + s * MAX_GENERIC_BUTTONS + b;
+                        const bool in_baseline = baseline_it != m_generic_device_baseline.end() &&
+                                                 baseline_it->second.test(b);
+                        if (!in_baseline && dev.buttons.test(b)) {
+                            m_value = GENERIC_DEVICE_BASE + b;
+                            m_generic_device_path = dev.device_path;
                             m_waiting_for_new_key = false;
                         }
                     }
@@ -569,12 +584,16 @@ public:
                 }
             }
             else if (m_value >= GENERIC_DEVICE_BASE && m_value <= GENERIC_DEVICE_MAX) {
-                const auto [slot, button] = decode_generic_binding(m_value);
+                const int button = decode_generic_button(m_value);
+                // Find the device by path to get its display name
                 const auto& devices = g_framework->get_generic_devices();
-                if (slot < (int)devices.size()) {
-                    ImGui::Text("Device %d Button %d", slot, button + 1);
+                const auto it = std::find_if(devices.begin(), devices.end(),
+                    [&](const Framework::GenericDeviceState& d) { return d.device_path == m_generic_device_path; });
+                if (it != devices.end()) {
+                    ImGui::Text("%s Button %d", it->display_name.c_str(), button + 1);
                 } else {
-                    ImGui::Text("Device %d Button %d (disconnected)", slot, button + 1);
+                    // Device not currently connected — show what we know
+                    ImGui::Text("Button %d (device disconnected)", button + 1);
                 }
             }
             else {
@@ -593,8 +612,7 @@ public:
         }
 
         if (m_value >= GENERIC_DEVICE_BASE) {
-            const auto [slot, button] = decode_generic_binding(m_value);
-            return g_framework->get_generic_device_button(slot, button);
+            return g_framework->get_generic_device_button(m_generic_device_path, decode_generic_button(m_value));
         }
 
         if (m_value >= GAMEPAD_BUTTON_BASE) {
@@ -651,7 +669,8 @@ public:
 protected:
     bool m_was_key_down{ false };
     bool m_waiting_for_new_key{ false };
-    std::vector<std::bitset<Framework::MAX_GENERIC_BUTTONS_PER_DEVICE>> m_generic_device_baseline{};
+    std::string m_generic_device_path{};
+    std::unordered_map<std::string, std::bitset<Framework::MAX_GENERIC_BUTTONS_PER_DEVICE>> m_generic_device_baseline{};
 };
 
 class ModString : public ModValue<std::string> {
