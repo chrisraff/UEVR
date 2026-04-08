@@ -2079,12 +2079,24 @@ void Framework::register_raw_input_devices() {
 }
 
 void Framework::update_generic_device_state(HANDLE device_handle, const RAWHID& hid_data) {
-    // Find or create device slot
+    // Resolve device path for this handle (used as stable identity)
+    char name_buf[256]{};
+    UINT name_size = sizeof(name_buf);
+    GetRawInputDeviceInfoA(device_handle, RIDI_DEVICENAME, name_buf, &name_size);
+    const std::string device_path = name_buf;
+
+    // Find existing slot: first by handle (fast path), then by path (handles reconnect)
     int slot = -1;
     for (int i = 0; i < (int)m_generic_devices.size(); ++i) {
         if (m_generic_devices[i].handle == device_handle) {
             slot = i;
             break;
+        }
+        if (slot == -1 && m_generic_devices[i].device_path == device_path) {
+            // Same device reconnected with a new handle; reclaim its slot
+            slot = i;
+            m_generic_devices[i].handle = device_handle;
+            SPDLOG_INFO("[Framework] Generic input device reconnected in slot {}: {}", slot, device_path);
         }
     }
 
@@ -2096,11 +2108,26 @@ void Framework::update_generic_device_state(HANDLE device_handle, const RAWHID& 
         m_generic_devices.push_back({});
         auto& dev = m_generic_devices[slot];
         dev.handle = device_handle;
+        dev.device_path = device_path;
 
-        char name_buf[256]{};
-        UINT name_size = sizeof(name_buf);
-        GetRawInputDeviceInfoA(device_handle, RIDI_DEVICENAME, name_buf, &name_size);
-        dev.product_name = name_buf;
+        // Get human-readable product name via HidD_GetProductString
+        HANDLE hid_handle = CreateFileA(name_buf, 0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (hid_handle != INVALID_HANDLE_VALUE) {
+            wchar_t prod_buf[128]{};
+            if (HidD_GetProductString(hid_handle, prod_buf, sizeof(prod_buf))) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, prod_buf, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 1) {
+                    std::string narrow(len - 1, '\0');
+                    WideCharToMultiByte(CP_UTF8, 0, prod_buf, -1, narrow.data(), len, nullptr, nullptr);
+                    dev.display_name = std::move(narrow);
+                }
+            }
+            CloseHandle(hid_handle);
+        }
+        if (dev.display_name.empty()) {
+            dev.display_name = device_path; // fallback
+        }
 
         UINT preparsed_size = 0;
         GetRawInputDeviceInfo(device_handle, RIDI_PREPARSEDDATA, nullptr, &preparsed_size);
@@ -2110,7 +2137,7 @@ void Framework::update_generic_device_state(HANDLE device_handle, const RAWHID& 
                 dev.preparsed_data.clear();
             }
         }
-        SPDLOG_INFO("[Framework] Generic input device registered in slot {}: {}", slot, dev.product_name);
+        SPDLOG_INFO("[Framework] Generic input device registered in slot {}: {} ({})", slot, dev.display_name, dev.device_path);
     }
 
     auto& dev = m_generic_devices[slot];
