@@ -107,11 +107,12 @@ public:
 
     static constexpr size_t MAX_GENERIC_DEVICES = 16;
     static constexpr size_t MAX_GENERIC_BUTTONS_PER_DEVICE = 128;
+    static constexpr size_t MAX_RAW_INPUT_SIZE = 4096;
 
     struct GenericDeviceState {
         HANDLE handle{};
         std::string product_name{};
-        std::bitset<128> buttons{};
+        std::bitset<MAX_GENERIC_BUTTONS_PER_DEVICE> buttons{};
         std::vector<uint8_t> preparsed_data{}; // cached PHIDP_PREPARSED_DATA
     };
 
