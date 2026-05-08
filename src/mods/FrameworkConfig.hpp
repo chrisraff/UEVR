@@ -22,6 +22,16 @@ public:
             *m_log_level,
             *m_always_show_cursor,
             *m_font_size,
+            *m_nav_up,
+            *m_nav_down,
+            *m_nav_left,
+            *m_nav_right,
+            *m_nav_confirm,
+            *m_nav_cancel,
+            *m_nav_prev_tab,
+            *m_nav_next_tab,
+            *m_nav_tweak_slow,
+            *m_nav_tweak_fast,
         };
     }
 
@@ -29,21 +39,24 @@ public:
         return "FrameworkConfig";
     }
 
-    std::vector<SidebarEntryInfo> get_sidebar_entries() override { 
+    std::vector<SidebarEntryInfo> get_sidebar_entries() override {
         return {
                     { "Main", false },
-                    { "GUI/Themes", false }
+                    { "GUI/Themes", false },
+                    { "Nav Bindings", false },
         };
     }
 
     std::optional<std::string> on_initialize() override;
     void on_frame() override;
+    void on_pre_imgui_frame() override;
     void on_config_load(const utility::Config& cfg, bool set_defaults) override;
     void on_config_save(utility::Config& cfg) override;
     void on_draw_sidebar_entry(std::string_view in_entry) override;
 
     void draw_themes();
     void draw_main();
+    void draw_nav_bindings();
 
     auto& get_menu_key() {
         return m_menu_key;
@@ -121,10 +134,29 @@ private:
     ModToggle::Ptr m_l3_r3_long_press{ ModToggle::create(generate_name("L3R3LongPress"), false) };
     ModToggle::Ptr m_always_show_cursor{ ModToggle::create(generate_name("AlwaysShowCursor"), false) };
     ModToggle::Ptr m_advanced_mode{ ModToggle::create(generate_name("AdvancedMode"), false) };
-    
+
     ModCombo::Ptr m_imgui_theme{ ModCombo::create(generate_name("ImGuiTheme"), s_imgui_themes, Framework::ImGuiThemes::DEFAULT_DARK) };
     ModCombo::Ptr m_log_level{ ModCombo::create(generate_name("LogLevel"), s_get_log_levels(), spdlog::level::info) };
-    
+
     ModKey::Ptr m_show_cursor_key{ ModKey::create(generate_name("ShowCursorKey")) };
     ModInt32::Ptr m_font_size{ModInt32::create(generate_name("FontSize"), 16)};
+
+    // Menu navigation bindings — any HID device can be bound to these
+    ModKey::Ptr m_nav_up{ ModKey::create(generate_name("NavUp")) };
+    ModKey::Ptr m_nav_down{ ModKey::create(generate_name("NavDown")) };
+    ModKey::Ptr m_nav_left{ ModKey::create(generate_name("NavLeft")) };
+    ModKey::Ptr m_nav_right{ ModKey::create(generate_name("NavRight")) };
+    ModKey::Ptr m_nav_confirm{ ModKey::create(generate_name("NavConfirm")) };
+    ModKey::Ptr m_nav_cancel{ ModKey::create(generate_name("NavCancel")) };
+    ModKey::Ptr m_nav_prev_tab{ ModKey::create(generate_name("NavPrevTab")) };
+    ModKey::Ptr m_nav_next_tab{ ModKey::create(generate_name("NavNextTab")) };
+    ModKey::Ptr m_nav_tweak_slow{ ModKey::create(generate_name("NavTweakSlow")) };
+    ModKey::Ptr m_nav_tweak_fast{ ModKey::create(generate_name("NavTweakFast")) };
+
+    struct NavPrevState {
+        bool up{}, down{}, left{}, right{};
+        bool confirm{}, cancel{};
+        bool prev_tab{}, next_tab{};
+        bool tweak_slow{}, tweak_fast{};
+    } m_nav_prev_state{};
 };

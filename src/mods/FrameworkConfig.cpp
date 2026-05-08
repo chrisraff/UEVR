@@ -36,6 +36,26 @@ void FrameworkConfig::draw_themes() {
     }
 }
 
+void FrameworkConfig::draw_nav_bindings() {
+    ImGui::TextWrapped("Bind buttons from any input device (keyboard, gamepad, racing wheel, joystick, etc.) to navigate this menu.");
+    ImGui::TextWrapped("Click a button below, then press the button you want to bind. Right-click to clear.");
+    ImGui::Separator();
+
+    m_nav_up->draw("Navigate Up");
+    m_nav_down->draw("Navigate Down");
+    m_nav_left->draw("Navigate Left");
+    m_nav_right->draw("Navigate Right");
+    ImGui::Separator();
+    m_nav_confirm->draw("Confirm / Select");
+    m_nav_cancel->draw("Cancel / Back");
+    ImGui::Separator();
+    m_nav_prev_tab->draw("Previous Tab (L1)");
+    m_nav_next_tab->draw("Next Tab (R1)");
+    ImGui::Separator();
+    m_nav_tweak_slow->draw("Tweak Value Slowly (L2)");
+    m_nav_tweak_fast->draw("Tweak Value Quickly (R2)");
+}
+
 void FrameworkConfig::on_draw_sidebar_entry(std::string_view in_entry) {
     on_draw_ui();
     ImGui::Separator();
@@ -44,7 +64,35 @@ void FrameworkConfig::on_draw_sidebar_entry(std::string_view in_entry) {
         draw_main();
     } else if (in_entry == "GUI/Themes") {
         draw_themes();
+    } else if (in_entry == "Nav Bindings") {
+        draw_nav_bindings();
     }
+}
+
+void FrameworkConfig::on_pre_imgui_frame() {
+    if (!g_framework->is_drawing_ui()) {
+        return;
+    }
+
+    auto& io = ImGui::GetIO();
+
+    auto inject = [&](ImGuiKey key, bool down, bool& prev) {
+        if (down || prev) {
+            io.AddKeyEvent(key, down);
+            prev = down;
+        }
+    };
+
+    inject(ImGuiKey_GamepadDpadUp,    m_nav_up->is_key_down(),         m_nav_prev_state.up);
+    inject(ImGuiKey_GamepadDpadDown,  m_nav_down->is_key_down(),       m_nav_prev_state.down);
+    inject(ImGuiKey_GamepadDpadLeft,  m_nav_left->is_key_down(),       m_nav_prev_state.left);
+    inject(ImGuiKey_GamepadDpadRight, m_nav_right->is_key_down(),      m_nav_prev_state.right);
+    inject(ImGuiKey_GamepadFaceDown,  m_nav_confirm->is_key_down(),    m_nav_prev_state.confirm);
+    inject(ImGuiKey_GamepadFaceRight, m_nav_cancel->is_key_down(),     m_nav_prev_state.cancel);
+    inject(ImGuiKey_GamepadL1,        m_nav_prev_tab->is_key_down(),   m_nav_prev_state.prev_tab);
+    inject(ImGuiKey_GamepadR1,        m_nav_next_tab->is_key_down(),   m_nav_prev_state.next_tab);
+    inject(ImGuiKey_GamepadL2,        m_nav_tweak_slow->is_key_down(), m_nav_prev_state.tweak_slow);
+    inject(ImGuiKey_GamepadR2,        m_nav_tweak_fast->is_key_down(), m_nav_prev_state.tweak_fast);
 }
 
 void FrameworkConfig::on_frame() {
